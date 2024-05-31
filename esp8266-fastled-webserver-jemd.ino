@@ -16,6 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#define FASTLED_ESP8266_NODEMCU_PIN_ORDER
+
 #include <FastLED.h>
 FASTLED_USING_NAMESPACE
 
@@ -54,12 +56,13 @@ ESP8266HTTPUpdateServer httpUpdateServer;
 //#include "WiFi.h"
 #include "FSBrowser.h"
 
-#define DATA_PIN      8
-#define LED_TYPE      WS2811
-#define COLOR_ORDER   GRB
+#define DATA_PIN      5
+#define LED_TYPE      WS2812B
+#define COLOR_ORDER   GRB // GRB
 #define NUM_LEDS      12
+#define SWITCH_PIN    16
 
-#define MILLI_AMPS         2000     // IMPORTANT: set the max milli-Amps of your power supply (4A = 4000mA)
+#define MILLI_AMPS         1000     // IMPORTANT: set the max milli-Amps of your power supply (4A = 4000mA)
 #define FRAMES_PER_SECOND  120 // here you can control the speed. With the Access Point / Web Server the animations run a bit slower.
 
 // TCP server at port 80 will respond to HTTP requests
@@ -199,14 +202,22 @@ const String paletteNames[paletteCount] = {
   "Cloud",
   "Lava",
   "Ocean",
-   "Forest",
+  "Forest",
   "Party",
-   "Heat",
+  "Heat",
  };
 
 #include "Fields.h"
 
+
+int switchOldState = 0;
+int switchCurrentState = 0;
+
 void setup() {
+  // switch on/off
+  pinMode(SWITCH_PIN, INPUT);
+  switchOldState = digitalRead(SWITCH_PIN);
+  
   Serial.begin(115200);
   delay(100);
   Serial.setDebugOutput(true);
@@ -252,6 +263,16 @@ void setup() {
   //disabled due to https://github.com/jasoncoon/esp8266-fastled-webserver/issues/62
   //initializeWiFi();
 
+  #include "Secrets.h" // this file is intentionally not included in the sketch, so nobody accidentally commits their secret information.
+  // create a Secrets.h file with the following:
+
+  // AP mode password
+  // const char WiFiAPPSK[] = "your-password";
+
+  // Wi-Fi network to connect to (if not in AP mode)
+  // char* ssid = "your-ssid";
+  // char* password = "your-password";
+
   if (apMode){
     WiFi.mode(WIFI_AP);
 
@@ -262,7 +283,7 @@ void setup() {
     String macID = String(mac[WL_MAC_ADDR_LENGTH - 2], HEX) +
                    String(mac[WL_MAC_ADDR_LENGTH - 1], HEX);
     macID.toUpperCase();
-    String AP_NameString = "ESP8266 Thing " + macID;
+    String AP_NameString = "SmartLAMP-" + macID;
 
     char AP_NameChar[AP_NameString.length() + 1];
     memset(AP_NameChar, 0, AP_NameString.length() + 1);
@@ -270,16 +291,14 @@ void setup() {
     for (int i = 0; i < AP_NameString.length(); i++)
       AP_NameChar[i] = AP_NameString.charAt(i);
 
-//    WiFi.softAP(AP_NameChar, WiFiAPPSK);
+    WiFi.softAP(AP_NameChar, WiFiAPPSK);
 
     Serial.printf("Connect to Wi-Fi access point: %s\n", AP_NameChar);
     Serial.println("and open http://192.168.4.1 in your browser");
   }
   else{
     WiFi.mode(WIFI_STA);
-    wifiMulti.addAP("Javier","0147852369");
-    wifiMulti.addAP("Notebook-JEMD","xuncoco1234");
-    wifiMulti.addAP("jemd","xuncoco1234");
+    wifiMulti.addAP(ssid, password);
 
     while (wifiMulti.run() != WL_CONNECTED) {
       delay(500);
@@ -296,7 +315,7 @@ void setup() {
     //   the fully-qualified domain name is "esp8266.local"
     // - second argument is the IP address to advertise
     //   we send our IP address on the WiFi network
-    if (!MDNS.begin("smartlamp")) {
+    if (!MDNS.begin("SmartLAMP")) {
       Serial.println("Error setting up MDNS responder!");
       while(1) { 
         delay(1000);
@@ -336,11 +355,11 @@ void setup() {
     webServer.send(200, "text/json", value);
   });
 
-  webServer.on("/name", HTTP_POST, []() {
-    String value = webServer.arg("value");
-    setName(value);
-    sendInt(name);
-  });
+  // webServer.on("/name", HTTP_POST, []() {
+  //   String value = webServer.arg("value");
+  //   setName(value);
+  //   sendString(name);
+  // });
 
   webServer.on("/power", HTTP_POST, []() {
     String value = webServer.arg("value");
@@ -454,6 +473,7 @@ void setup() {
   }, handleFileUpload);
 
   webServer.serveStatic("/", SPIFFS, "/", "max-age=86400");
+  // webServer.serveStatic("/", SPIFFS, "/").setDefaultFile("index.html").setCacheControl("max-age=86400");
 
   webServer.begin();
   Serial.println("HTTP web server started");
@@ -491,15 +511,28 @@ void loop() {
   // Add entropy to random number generator; we use a lot of it.
   random16_add_entropy(random(65535));
 
-//  EVERY_N_SECONDS(10) {
-//    checkWiFi();
-//  }
-
-//  dnsServer.processNextRequest();
+  //  EVERY_N_SECONDS(10) {
+  //    checkWiFi();
+  //  }
+  
+  //  dnsServer.processNextRequest();
   webSocketsServer.loop();
   webServer.handleClient();
+  
+  //  handleIrInput();
 
-//  handleIrInput();
+  switchCurrentState = digitalRead(SWITCH_PIN);
+
+  if (switchCurrentState != switchOldState) {
+    (power == 1) ? power = 0 : power = 1;
+
+    Serial.print("switchOldState: ");
+    Serial.println(switchOldState);
+    Serial.print(" switchCurrentState: ");
+    Serial.println(switchCurrentState);
+  }
+
+  switchOldState = switchCurrentState;
 
   if (power == 0) {
     fill_solid(leds, NUM_LEDS, CRGB::Black);
@@ -826,15 +859,15 @@ void setPower(uint8_t value)
   broadcastInt("power", power);
 }
 
-void setName(String value)
-{
-  name = value;
+// void setName(String value)
+// {
+//   name = value;
 
-  EEPROM.write(9, name);
-  EEPROM.commit();
+//   EEPROM.write(9, name);
+//   EEPROM.commit();
 
-  broadcastInt("name", name);
-}
+//   broadcastInt("name", name);
+// }
 
 void setAutoplay(uint8_t value)
   {

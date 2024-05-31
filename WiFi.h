@@ -10,10 +10,10 @@
 const char WiFiAPPSK[] = "";
 
 // Wi-Fi network to connect to (if not in AP mode)
-char* ssid = "Notebook-JEMD";
-char* password = "xuncoco1234";
+char* ssid = "Javier";
+char* password = "A0B1C4D7E8F5G2H3I6J9K";
 
-#define HOSTNAME "SmartLamp" ///< Hostname. The initializeWiFi function adds the Chip ID at the end.
+#define HOSTNAME "SmartLAMP" ///< Hostname. The initializeWiFi function adds the Chip ID at the end.
 
 #define DEBUG_WIFI 1
 
@@ -36,7 +36,7 @@ void startAp() {
   //  WiFi.mode(WIFI_AP_STA);
   // debugPrintln("SET AP STA");
 
-  String AP_NameString = "ESP8266-";
+  String AP_NameString = "SmartLAMP-";
   AP_NameString += String(ESP.getChipId(), HEX);
 
   char AP_NameChar[AP_NameString.length() + 1];

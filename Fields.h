@@ -18,6 +18,7 @@
 
 uint8_t power = 1;
 uint8_t brightness = brightnessMap[brightnessIndex];
+String name = "15";
 
 //String setPower(String value) {
 //  power = value.toInt();
